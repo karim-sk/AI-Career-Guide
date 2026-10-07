@@ -1,7 +1,7 @@
 # AI Career Navigator
 
 🚀 **Live Website:**  
-https://ai-career-navigator-v1.onrender.com
+https://ai-career-guide-pqux.onrender.com
 
 # 🎯 AI Career Navigator
 
