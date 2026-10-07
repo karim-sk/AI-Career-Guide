@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>About Our Team | AI Career Navigator</title>
+
+    <style>
+        /* =========================
+           RESET
+        ========================== */
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+
+        /* =========================
+           BODY
+        ========================== */
+
+        body {
+            background:
+                linear-gradient(
+                    135deg,
+                    #0f172a 0%,
+                    #1e3a8a 50%,
+                    #312e81 100%
+                );
+
+            min-height: 100vh;
+            color: #ffffff;
+        }
+
+        /* =========================
+           NAVIGATION
+        ========================== */
+
+        nav {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+
+            width: 100%;
+
+            background: rgba(15, 23, 42, 0.95);
+
+            padding: 18px 8%;
+
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+
+            backdrop-filter: blur(15px);
+
+            border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        nav h2 {
+            color: #60a5fa;
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        nav a {
+            text-decoration: none;
+            color: #ffffff;
+
+            padding: 10px 18px;
+
+            border: 1px solid #60a5fa;
+            border-radius: 8px;
+
+            transition: all 0.3s ease;
+        }
+
+        nav a:hover {
+            background: #2563eb;
+            border-color: #2563eb;
+            transform: translateY(-2px);
+        }
+
+        /* =========================
+           MAIN CONTAINER
+        ========================== */
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+
+            margin: 0 auto;
+
+            padding: 60px 25px;
+        }
+
+        /* =========================
+           PAGE HEADER
+        ========================== */
+
+        .page-header {
+            text-align: center;
+
+            margin-bottom: 55px;
+        }
+
+        .page-header h1 {
+            font-size: 46px;
+            font-weight: 700;
+
+            margin-bottom: 18px;
+        }
+
+        .page-header h1 span {
+            color: #60a5fa;
+        }
+
+        .page-header p {
+            max-width: 800px;
+
+            margin: 0 auto;
+
+            color: #cbd5e1;
+
+            font-size: 18px;
+            line-height: 1.8;
+        }
+
+        .college {
+            display: inline-block;
+
+            margin-top: 22px;
+
+            padding: 10px 22px;
+
+            border-radius: 30px;
+
+            background: #2563eb;
+
+            color: #ffffff;
+
+            font-size: 15px;
+            font-weight: 500;
+
+            box-shadow: 0 8px 25px rgba(37, 99, 235, 0.3);
+        }
+
+        /* =========================
+           TEAM GRID
+        ========================== */
+
+        .team-grid {
+            width: 100%;
+
+            display: grid;
+
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+
+            gap: 28px;
+
+            margin-top: 20px;
+        }
+
+        /* =========================
+           MEMBER CARD
+        ========================== */
+
+        .member-card {
+            width: 100%;
+
+            background: rgba(255, 255, 255, 0.09);
+
+            border: 1px solid rgba(255, 255, 255, 0.18);
+
+            padding: 32px 26px;
+
+            border-radius: 20px;
+
+            backdrop-filter: blur(15px);
+
+            text-align: center;
+
+            transition:
+                transform 0.35s ease,
+                border-color 0.35s ease,
+                box-shadow 0.35s ease;
+
+            box-shadow:
+                0 10px 30px rgba(0, 0, 0, 0.18);
+        }
+
+        .member-card:hover {
+            transform: translateY(-8px);
+
+            border-color: #60a5fa;
+
+            box-shadow:
+                0 18px 45px rgba(37, 99, 235, 0.28);
+        }
+
+        /* =========================
+           AVATAR
+        ========================== */
+
+        .avatar {
+            width: 100px;
+            height: 100px;
+
+            margin: 0 auto;
+
+            border-radius: 50%;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #2563eb,
+                    #7c3aed
+                );
+
+            border: 4px solid #60a5fa;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            font-size: 30px;
+            font-weight: 700;
+
+            box-shadow:
+                0 0 30px rgba(96, 165, 250, 0.4);
+        }
+
+        /* =========================
+           MEMBER NAME
+        ========================== */
+
+        .member-card h2 {
+            margin-top: 20px;
+
+            font-size: 25px;
+
+            font-weight: 700;
+
+            color: #ffffff;
+        }
+
+        /* =========================
+           ROLE
+        ========================== */
+
+        .role {
+            display: inline-block;
+
+            margin-top: 10px;
+
+            padding: 7px 16px;
+
+            border-radius: 30px;
+
+            background: #2563eb;
+
+            color: #ffffff;
+
+            font-size: 13px;
+            font-weight: 500;
+
+            box-shadow:
+                0 5px 15px rgba(37, 99, 235, 0.25);
+        }
+
+        /* =========================
+           INSTITUTION
+        ========================== */
+
+        .institution {
+            margin-top: 16px;
+
+            color: #cbd5e1;
+
+            font-size: 15px;
+
+            line-height: 1.6;
+        }
+
+        /* =========================
+           DETAILS
+        ========================== */
+
+        .details {
+            margin-top: 22px;
+
+            padding-top: 18px;
+
+            text-align: left;
+
+            border-top:
+                1px solid rgba(255, 255, 255, 0.14);
+        }
+
+        .detail {
+            margin: 14px 0;
+        }
+
+        .label {
+            margin-bottom: 5px;
+
+            font-size: 12px;
+
+            color: #94a3b8;
+
+            text-transform: uppercase;
+
+            letter-spacing: 0.5px;
+        }
+
+        .value {
+            font-size: 15px;
+
+            font-weight: 600;
+
+            color: #e2e8f0;
+
+            word-break: break-word;
+        }
+
+        .value a {
+            color: #bfdbfe;
+
+            text-decoration: none;
+
+            transition: color 0.25s ease;
+        }
+
+        .value a:hover {
+            color: #60a5fa;
+
+            text-decoration: underline;
+        }
+
+        /* =========================
+           VISHNU PRIYA CARD
+        ========================== */
+
+        .pending {
+            border: 1px solid rgba(96, 165, 250, 0.4);
+        }
+
+        .pending .avatar {
+            background:
+                linear-gradient(
+                    135deg,
+                    #334155,
+                    #4f46e5
+                );
+        }
+
+        .pending-text {
+            margin-top: 15px;
+
+            color: #94a3b8;
+
+            font-size: 13px;
+        }
+
+        /* =========================
+           PROJECT SECTION
+        ========================== */
+
+        .project-section {
+            margin-top: 60px;
+
+            padding: 38px 35px;
+
+            background: rgba(255, 255, 255, 0.09);
+
+            border: 1px solid rgba(255, 255, 255, 0.18);
+
+            border-radius: 20px;
+
+            backdrop-filter: blur(15px);
+
+            text-align: center;
+
+            box-shadow:
+                0 10px 30px rgba(0, 0, 0, 0.15);
+        }
+
+        .project-section h2 {
+            color: #93c5fd;
+
+            font-size: 28px;
+
+            margin-bottom: 16px;
+        }
+
+        .project-section p {
+            max-width: 900px;
+
+            margin: 0 auto;
+
+            color: #cbd5e1;
+
+            line-height: 1.9;
+
+            font-size: 16px;
+        }
+
+        /* =========================
+           FOOTER
+        ========================== */
+
+        footer {
+            margin-top: 65px;
+
+            padding: 32px 20px;
+
+            text-align: center;
+
+            color: #cbd5e1;
+
+            border-top:
+                1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        footer h3 {
+            color: #60a5fa;
+
+            margin-bottom: 8px;
+
+            font-size: 20px;
+        }
+
+        footer p {
+            font-size: 14px;
+        }
+
+        /* =========================
+           TABLET
+        ========================== */
+
+        @media (max-width: 950px) {
+
+            .team-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .page-header h1 {
+                font-size: 40px;
+            }
+        }
+
+        /* =========================
+           MOBILE
+        ========================== */
+
+        @media (max-width: 650px) {
+
+            nav {
+                padding: 15px 5%;
+            }
+
+            nav h2 {
+                font-size: 18px;
+            }
+
+            nav a {
+                padding: 8px 13px;
+
+                font-size: 13px;
+            }
+
+            .container {
+                padding: 45px 18px;
+            }
+
+            .page-header {
+                margin-bottom: 40px;
+            }
+
+            .page-header h1 {
+                font-size: 34px;
+            }
+
+            .page-header p {
+                font-size: 16px;
+            }
+
+            .college {
+                font-size: 13px;
+
+                padding: 9px 16px;
+            }
+
+            .team-grid {
+                grid-template-columns: 1fr;
+
+                gap: 22px;
+            }
+
+            .member-card {
+                padding: 30px 22px;
+            }
+
+            .project-section {
+                padding: 28px 20px;
+            }
+
+            .project-section h2 {
+                font-size: 24px;
+            }
+
+            .project-section p {
+                font-size: 15px;
+            }
+        }
+    </style>
+
+</head>
+
+
+<body>
+
+    <!-- =========================
+         NAVIGATION
+    ========================== -->
+
+    <nav>
+
+        <h2>
+            AI Career Navigator
+        </h2>
+
+        <a href="index.html">
+            ← Home
+        </a>
+
+    </nav>
+
+
+    <!-- =========================
+         MAIN CONTENT
+    ========================== -->
+
+    <main class="container">
+
+
+        <!-- =========================
+             PAGE HEADER
+        ========================== -->
+
+        <section class="page-header">
+
+            <h1>
+                Meet Our
+                <span>Team</span>
+            </h1>
+
+            <p>
+                AI Career Navigator is developed by a team of students
+                passionate about technology, artificial intelligence,
+                web development, and career guidance.
+            </p>
+
+            <div class="college">
+
+                Vellore Institute of Technology (VIT), Vellore
+
+            </div>
+
+        </section>
+
+
+        <!-- =========================
+             TEAM MEMBERS
+        ========================== -->
+
+        <section class="team-grid">
+
+
+            <!-- =====================
+                 KARIMULLA
+            ====================== -->
+
+            <div class="member-card">
+
+                <div class="avatar">
+                    KS
+                </div>
+
+                <h2>
+                    Karimulla S
+                </h2>
+
+                <div class="role">
+                    Team Member
+                </div>
+
+                <p class="institution">
+                    Vellore Institute of Technology (VIT), Vellore
+                </p>
+
+                <div class="details">
+
+                    <div class="detail">
+
+                        <div class="label">
+                            Phone
+                        </div>
+
+                        <div class="value">
+
+                            <a href="tel:6385296965">
+                                6385296965
+                            </a>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="detail">
+
+                        <div class="label">
+                            Email
+                        </div>
+
+                        <div class="value">
+
+                            <a href="mailto:karimulla8812@gmail.com">
+                                karimulla8812@gmail.com
+                            </a>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- =====================
+                 MUKESH
+            ====================== -->
+
+            <div class="member-card">
+
+                <div class="avatar">
+                    MG
+                </div>
+
+                <h2>
+                    Mukesh G
+                </h2>
+
+                <div class="role">
+                    Team Member
+                </div>
+
+                <p class="institution">
+                    Vellore Institute of Technology (VIT), Vellore
+                </p>
+
+                <div class="details">
+
+                    <div class="detail">
+
+                        <div class="label">
+                            Phone
+                        </div>
+
+                        <div class="value">
+
+                            <a href="tel:86672316631">
+                                86672316631
+                            </a>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="detail">
+
+                        <div class="label">
+                            Email
+                        </div>
+
+                        <div class="value">
+
+                            <a href="mailto:mukeshgovintharaj5@gmail.com">
+                                mukeshgovintharaj5@gmail.com
+                            </a>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- =====================
+                 SUSHMITHA
+            ====================== -->
+
+            <div class="member-card">
+
+                <div class="avatar">
+                    SM
+                </div>
+
+                <h2>
+                    Sushmitha M
+                </h2>
+
+                <div class="role">
+                    Team Member
+                </div>
+
+                <p class="institution">
+                    Vellore Institute of Technology (VIT), Vellore
+                </p>
+
+                <div class="details">
+
+                    <div class="detail">
+
+                        <div class="label">
+                            Phone
+                        </div>
+
+                        <div class="value">
+
+                            <a href="tel:8190034654">
+                                8190034654
+                            </a>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="detail">
+
+                        <div class="label">
+                            Email
+                        </div>
+
+                        <div class="value">
+
+                            <a href="mailto:sushmitha26052007@gmail.com">
+                                sushmitha26052007@gmail.com
+                            </a>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- =====================
+                 ROHINI
+            ====================== -->
+
+            <div class="member-card">
+
+                <div class="avatar">
+                    RT
+                </div>
+
+                <h2>
+                    Rohini T
+                </h2>
+
+                <div class="role">
+                    Team Member
+                </div>
+
+                <p class="institution">
+                    Vellore Institute of Technology (VIT), Vellore
+                </p>
+
+                <div class="details">
+
+                    <div class="detail">
+
+                        <div class="label">
+                            Phone
+                        </div>
+
+                        <div class="value">
+
+                            <a href="tel:9363925744">
+                                9363925744
+                            </a>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="detail">
+
+                        <div class="label">
+                            Email
+                        </div>
+
+                        <div class="value">
+
+                            <a href="mailto:rohinithiru07@gmail.com">
+                                rohinithiru07@gmail.com
+                            </a>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- =====================
+                 VISHNU PRIYA
+            ====================== -->
+
+            <div class="member-card">
+
+                <div class="avatar">
+                    VP
+                </div>
+
+                <h2>
+                    Vishnu Priya
+                </h2>
+
+                <div class="role">
+                    Team Member
+                </div>
+
+                <p class="institution">
+                    Vellore Institute of Technology (VIT), Vellore
+                </p>
+
+                <div class="details">
+
+                    <div class="detail">
+
+                        <div class="label">
+                            Phone
+                        </div>
+
+                        <div class="value">
+
+                            <a href="tel:7305877412">
+                                7305877412
+                            </a>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="detail">
+
+                        <div class="label">
+                            Email
+                        </div>
+
+                        <div class="value">
+
+                            <a href="mailto:v0shnup7iya@gmail.com">
+                                v0shnup7iya@gmail.com
+                            </a>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+        </section>
+
+
+        <!-- =========================
+             PROJECT INFORMATION
+        ========================== -->
+
+        <section class="project-section">
+
+            <h2>
+                About AI Career Navigator
+            </h2>
+
+            <p>
+                AI Career Navigator is an AI-powered career guidance
+                platform designed to help students assess their technical
+                skills, identify skill gaps, explore suitable career paths,
+                and receive personalized learning roadmaps.
+                The platform combines skill assessment, artificial
+                intelligence, career analysis, and personalized learning
+                guidance in one place.
+            </p>
+
+        </section>
+
+
+    </main>
+
+
+    <!-- =========================
+         FOOTER
+    ========================== -->
+
+    <footer>
+
+        <h3>
+            AI Career Navigator
+        </h3>
+
+        <p>
+            Developed by students of
+            Vellore Institute of Technology (VIT), Vellore
+        </p>
+
+    </footer>
+
+
+</body>
+
+</html>

@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Assessment — AI Career Navigator</title>
+<link rel="stylesheet" href="/css/main.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="page-layout">
+  <div id="sidebar-placeholder"></div>
+
+  <div class="main-content">
+    <header class="page-header">
+      <button class="hamburger" id="hamburger">☰</button>
+      <div>
+        <div class="page-title">Skill Assessment</div>
+        <div class="page-subtitle" id="assessment-subtitle">Adaptive assessment for your career path</div>
+      </div>
+      <div id="header-actions"></div>
+    </header>
+
+    <main class="page-body">
+      <div id="page-content">
+        <!-- Start screen -->
+        <div id="start-screen" class="assessment-container">
+          <div class="card" style="text-align:center;padding:3rem">
+            <div style="font-size:4rem;margin-bottom:1.5rem">📝</div>
+            <h2 style="margin-bottom:.75rem">Ready to Assess Your Skills?</h2>
+            <p class="text-muted" style="max-width:500px;margin:0 auto 2rem;line-height:1.7">
+              This adaptive assessment will evaluate your skills for your target career.
+              Questions adjust in difficulty based on your answers — 30 questions total.
+            </p>
+            <div style="background:var(--bg-hover);border-radius:var(--radius);padding:1.25rem;margin-bottom:2rem;text-align:left;max-width:400px;margin-left:auto;margin-right:auto">
+              <div style="font-weight:700;margin-bottom:.75rem;font-size:.9rem">How it works:</div>
+              <div style="display:flex;flex-direction:column;gap:.5rem;font-size:.875rem;color:var(--text-muted)">
+                <div>🎯 Questions adapt to your difficulty level</div>
+                <div>✅ Answer correctly → harder questions</div>
+                <div>❌ Answer wrong → easier questions</div>
+                <div>📊 Results show per-skill proficiency</div>
+                <div>⏱ Take as long as you need</div>
+              </div>
+            </div>
+            <div id="career-info" style="margin-bottom:2rem"></div>
+            <button class="btn btn-primary btn-lg" id="start-btn" onclick="startAssessment()">
+              🚀 Start Assessment
+            </button>
+            <p style="margin-top:1rem;font-size:.8rem;color:var(--text-muted)">
+              No career goal set? <a href="/profile.html">Set one in your profile first →</a>
+            </p>
+          </div>
+        </div>
+
+        <!-- Assessment in progress -->
+        <div id="assessment-screen" class="hidden assessment-container">
+          <!-- Progress header -->
+          <div class="assessment-header">
+            <div class="assessment-meta">
+              <span class="text-muted text-sm" id="q-counter">Question 1 / 30</span>
+              <span class="difficulty-badge" id="difficulty-badge">Easy</span>
+              <span class="badge badge-blue" id="skill-badge">Skill</span>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="confirmAbandon()">✕ Quit</button>
+          </div>
+
+          <!-- Progress bar -->
+          <div style="margin-bottom:1.5rem">
+            <div style="display:flex;justify-content:space-between;margin-bottom:.5rem;font-size:.8rem;color:var(--text-muted)">
+              <span id="progress-label">0% complete</span>
+              <span id="score-label">0 correct</span>
+            </div>
+            <div class="progress-bar-wrap" style="height:6px">
+              <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+            </div>
+          </div>
+
+          <!-- Question card -->
+          <div class="card question-card">
+            <div class="question-text" id="question-text">Loading question...</div>
+            <div class="options-list" id="options-list"></div>
+          </div>
+
+          <!-- Explanation (shown after answering) -->
+          <div id="explanation-box" class="hidden" style="margin-bottom:1rem">
+            <div class="alert" id="explanation-alert"></div>
+          </div>
+
+          <!-- Navigation -->
+          <div class="assessment-nav">
+            <div id="answer-feedback" class="text-sm text-muted"></div>
+            <button class="btn btn-primary" id="next-btn" onclick="nextQuestion()" disabled>
+              Next Question →
+            </button>
+          </div>
+        </div>
+
+        <!-- Completion screen -->
+        <div id="completion-screen" class="hidden assessment-container">
+          <div class="card" style="text-align:center;padding:3rem">
+            <div style="font-size:4rem;margin-bottom:1rem">🎉</div>
+            <h2 style="margin-bottom:.5rem">Assessment Complete!</h2>
+            <p class="text-muted" style="margin-bottom:2rem">Calculating your results...</p>
+            <div class="loading-spinner" style="width:36px;height:36px;border-width:3px;margin:0 auto"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/sidebar.js"></script>
+<script>
+if (!requireAuth()) throw new Error('not auth');
+injectSidebar('assessment');
+
+let assessmentId = null;
+let currentIndex = 0;
+let totalQuestions = 30;
+let correctCount = 0;
+let answered = false;
+let currentQuestion = null;
+let activeJourneyId = null;
+let activeCareer = null;
+
+// Read journeyId from URL (when coming from History page)
+const _assessParams = new URLSearchParams(location.search);
+const _urlJourneyId = _assessParams.get('journeyId') || null;
+
+// ── Load career info on start screen ──────────────────────────
+async function initStartScreen() {
+  try {
+    // PRIORITY: if journeyId came from URL (History page), use that journey
+    if (_urlJourneyId) {
+      try {
+        const jRes = await api.getJourney(_urlJourneyId);
+        const journey = jRes.journey;
+        activeJourneyId = journey._id;
+        // careerId may be populated object or raw id
+        activeCareer = journey.careerId && journey.careerId._id
+          ? journey.careerId
+          : { _id: journey.careerId, title: journey.careerName, icon: journey.careerIcon };
+
+        document.getElementById('career-info').innerHTML = `
+          <div style="display:inline-flex;flex-direction:column;align-items:center;gap:.25rem;
+               background:var(--bg-hover);border-radius:var(--radius-sm);padding:.75rem 1.5rem">
+            <div style="display:flex;align-items:center;gap:.5rem;font-size:.875rem">
+              <span>${journey.careerIcon || '🎯'}</span>
+              <span>Career: <strong>${journey.careerName}</strong></span>
+            </div>
+            <div style="font-size:.75rem;color:var(--text-muted)">
+              🔄 ${journey.status === 'IN_PROGRESS' ? 'Continuing journey' : 'Starting journey'}
+              · Progress: ${journey.progress}%
+              · Previous attempts: ${jRes.assessmentResults ? jRes.assessmentResults.length : 0}
+            </div>
+          </div>
+          <div style="margin-top:.5rem">
+            <a href="/history.html" class="btn btn-ghost btn-sm">← Back to History</a>
+          </div>
+        `;
+        return; // done — don't fall through to profile-based init
+      } catch(e) {
+        // Journey lookup failed — fall through to profile
+      }
+    }
+
+    // DEFAULT: use current profile career goal
+    const profile = await api.getProfile();
+    const career = profile.user?.careerGoal;
+    activeCareer = career;
+
+    if (career) {
+      let journeyMsg = '';
+      try {
+        const journeysRes = await api.getJourneys();
+        const existingJourney = (journeysRes.journeys || []).find(j => {
+          const jCareerId = j.careerId && j.careerId._id ? j.careerId._id : j.careerId;
+          return jCareerId && jCareerId.toString() === career._id.toString();
+        });
+        if (existingJourney) {
+          activeJourneyId = existingJourney._id;
+          journeyMsg = `<div style="font-size:.78rem;color:var(--text-muted);margin-top:.5rem">
+            ${existingJourney.status === 'IN_PROGRESS' ? '🔄 Continuing existing journey' : '🚀 Starting journey'}
+            · Progress: ${existingJourney.progress}%
+          </div>`;
+        }
+      } catch(e) {}
+
+      document.getElementById('career-info').innerHTML = `
+        <div style="display:inline-flex;flex-direction:column;align-items:center;gap:.25rem;
+             background:var(--bg-hover);border-radius:var(--radius-sm);padding:.75rem 1.5rem;font-size:.875rem">
+          <div style="display:flex;align-items:center;gap:.5rem">
+            <span>${career.icon || '🎯'}</span>
+            <span>Career: <strong>${career.title}</strong></span>
+          </div>
+          ${journeyMsg}
+        </div>
+      `;
+    } else {
+      document.getElementById('start-btn').disabled = true;
+      document.getElementById('career-info').innerHTML = `
+        <div class="alert alert-warning">Please
+          <a href="/profile.html" style="color:var(--warning)">set your career goal</a>
+          before starting.
+        </div>
+      `;
+    }
+  } catch(e) {}
+}
+
+// ── Start assessment ───────────────────────────────────────────
+async function startAssessment() {
+  const btn = document.getElementById('start-btn');
+  setLoading(btn, true, 'Starting...');
+  try {
+    // Priority: URL journeyId > resolved activeJourneyId from profile
+    const effectiveJourneyId = _urlJourneyId || activeJourneyId;
+
+    // Ensure journey exists (idempotent — returns existing if found)
+    if (activeCareer && activeCareer._id) {
+      try {
+        const jRes = await api.createJourney({ careerId: activeCareer._id });
+        if (!effectiveJourneyId) activeJourneyId = jRes.journey._id;
+      } catch(e) { /* non-fatal */ }
+    }
+
+    const careerId = activeCareer
+      ? (activeCareer._id || activeCareer)
+      : null;
+
+    const data = await api.startAssessment(careerId, effectiveJourneyId || activeJourneyId);
+    assessmentId   = data.assessmentId;
+    totalQuestions = data.totalQuestions;
+    currentIndex   = 0;
+    correctCount   = 0;
+
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('assessment-screen').classList.remove('hidden');
+
+    renderQuestion(data.question, 0, data.totalQuestions);
+  } catch (err) {
+    showToast(err.message, 'error');
+    setLoading(btn, false);
+  }
+}
+
+// ── Render question ────────────────────────────────────────────
+function renderQuestion(q, index, total) {
+  currentQuestion = q;
+  answered = false;
+
+  const pct = Math.round((index / total) * 100);
+  document.getElementById('q-counter').textContent      = `Question ${index + 1} / ${total}`;
+  document.getElementById('progress-fill').style.width  = pct + '%';
+  document.getElementById('progress-label').textContent = `${pct}% complete`;
+  document.getElementById('score-label').textContent    = `${correctCount} correct`;
+
+  const diffBadge = document.getElementById('difficulty-badge');
+  diffBadge.textContent  = q.difficulty.charAt(0).toUpperCase() + q.difficulty.slice(1);
+  diffBadge.className    = `difficulty-badge difficulty-${q.difficulty}`;
+
+  document.getElementById('skill-badge').textContent = q.skillName || 'General';
+  document.getElementById('question-text').textContent = q.question;
+
+  document.getElementById('options-list').innerHTML = q.options.map((opt, i) => `
+    <div class="option-item" onclick="selectOption(${i}, this)" data-index="${i}">
+      <div class="option-radio"></div>
+      <span>${String.fromCharCode(65+i)}. ${opt}</span>
+    </div>
+  `).join('');
+
+  document.getElementById('explanation-box').classList.add('hidden');
+  document.getElementById('answer-feedback').textContent = '';
+  document.getElementById('next-btn').disabled = true;
+}
+
+// ── Select option ──────────────────────────────────────────────
+async function selectOption(selectedIdx, el) {
+  if (answered) return;
+  answered = true;
+
+  // Mark selected
+  document.querySelectorAll('.option-item').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+
+  // Disable all options
+  document.querySelectorAll('.option-item').forEach(o => {
+    o.style.pointerEvents = 'none';
+    o.style.opacity = '.7';
+  });
+  el.style.opacity = '1';
+
+  // Submit answer to backend
+  try {
+    const result = await api.submitAnswer(assessmentId, {
+      questionIndex: currentIndex,
+      selectedAnswer: selectedIdx
+    });
+
+    // Show correct/wrong
+    if (result.isCorrect) {
+      el.classList.add('correct');
+      correctCount++;
+      document.getElementById('answer-feedback').innerHTML =
+        '<span style="color:var(--success)">✓ Correct!</span>';
+    } else {
+      el.classList.add('wrong');
+      const correctEl = document.querySelector(`.option-item[data-index="${result.correctAnswer}"]`);
+      if (correctEl) { correctEl.classList.add('correct'); correctEl.style.opacity = '1'; }
+      document.getElementById('answer-feedback').innerHTML =
+        '<span style="color:var(--danger)">✕ Incorrect</span>';
+    }
+
+    document.getElementById('score-label').textContent = `${correctCount} correct`;
+
+    // Show explanation
+    if (currentQuestion.explanation || result.explanation) {
+      const expBox = document.getElementById('explanation-box');
+      const expAlert = document.getElementById('explanation-alert');
+      expBox.classList.remove('hidden');
+      expAlert.className = `alert ${result.isCorrect ? 'alert-success' : 'alert-info'}`;
+      expAlert.innerHTML = `<span>💡</span><span>${result.explanation || 'No explanation available.'}</span>`;
+    }
+
+    // Enable next button or show submit
+    const nextBtn = document.getElementById('next-btn');
+    nextBtn.disabled = false;
+
+    if (result.isComplete) {
+      nextBtn.textContent = '✓ Submit Assessment';
+      nextBtn.onclick = submitAssessment;
+    } else {
+      nextBtn.textContent = 'Next Question →';
+    }
+
+  } catch (err) {
+    showToast('Error submitting answer: ' + err.message, 'error');
+    answered = false;
+    document.querySelectorAll('.option-item').forEach(o => { o.style.pointerEvents = ''; o.style.opacity = ''; });
+  }
+}
+
+// ── Next question ──────────────────────────────────────────────
+async function nextQuestion() {
+  const nextBtn = document.getElementById('next-btn');
+  nextBtn.disabled = true;
+
+  currentIndex++;
+
+  try {
+    const data = await api.getQuestion(assessmentId, currentIndex);
+    renderQuestion(data.question, currentIndex, data.totalQuestions);
+  } catch (err) {
+    // If no more questions, go to submit
+    submitAssessment();
+  }
+}
+
+// ── Submit assessment ──────────────────────────────────────────
+async function submitAssessment() {
+  document.getElementById('assessment-screen').classList.add('hidden');
+  document.getElementById('completion-screen').classList.remove('hidden');
+
+  try {
+    const result = await api.submitAssessment(assessmentId);
+
+    // Carry journeyId forward so results.html can link correctly to the roadmap
+    // Priority: journey from the result itself > URL param > resolved activeJourneyId
+    const effectiveJourneyId = result.journeyId || _urlJourneyId || activeJourneyId || null;
+
+    showToast('Assessment complete! Redirecting to results...', 'success');
+    setTimeout(() => {
+      let url = `/results.html?resultId=${result.resultId}`;
+      if (effectiveJourneyId) url += `&journeyId=${effectiveJourneyId}`;
+      window.location.href = url;
+    }, 1500);
+  } catch (err) {
+    document.getElementById('completion-screen').innerHTML = `
+      <div class="card" style="text-align:center;padding:3rem">
+        <div class="alert alert-error">Failed to submit: ${err.message}</div>
+        <button class="btn btn-primary" onclick="submitAssessment()">Retry</button>
+      </div>
+    `;
+  }
+}
+
+// ── Confirm abandon ────────────────────────────────────────────
+function confirmAbandon() {
+  if (confirm('Are you sure you want to quit? Your progress will be lost.')) {
+    window.location.href = '/dashboard.html';
+  }
+}
+
+initStartScreen();
+</script>
+</body>
+</html>
