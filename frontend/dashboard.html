@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dashboard — AI Career Navigator</title>
 <link rel="stylesheet" href="/css/main.css">
+<link rel="stylesheet" href="/css/platform.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -30,11 +31,13 @@
         <p class="text-muted">Loading your dashboard...</p>
       </div>
     </main>
+    <section class="page-body" id="platform-widgets" aria-label="Resume and job opportunities" style="padding-top:0"></section>
   </div>
 </div>
 
 <script src="/js/api.js"></script>
 <script src="/js/sidebar.js"></script>
+<script src="/js/platform.js"></script>
 <script>
 if (!requireAuth()) throw new Error('not auth');
 injectSidebar('dashboard');
@@ -262,6 +265,30 @@ async function loadDashboard() {
 }
 
 loadDashboard();
+</script>
+<script>
+// Resume / Jobs / learning widgets — additive; the original dashboard above is untouched.
+(async function platformWidgets(){
+  const el = document.getElementById('platform-widgets'); if (!el || !getToken()) return;
+  try {
+    const jp = new URLSearchParams(location.search).get('journeyId');
+    let journeyId = jp || '';
+    if (!journeyId) { const js = (await api.getJourneys()).journeys || []; const j = js.find(x => x.status === 'IN_PROGRESS') || js[0]; journeyId = j ? j._id : ''; }
+    const s = await api.getJobSummary(journeyId);
+    const r = s.resume;
+    const resumeTxt = !r ? 'No resume yet' : r.status === 'confirmed' ? `Confirmed · ${r.skills} skills` : 'Uploaded · awaiting your review';
+    const next = !r ? ['Upload your resume','/resume.html'] : r.status !== 'confirmed' ? ['Review & confirm resume','/resume.html'] : s.recommendations.count ? ['View job matches','/jobs.html'+(journeyId?'?journeyId='+journeyId:'')] : ['Discover jobs','/jobs.html'+(journeyId?'?journeyId='+journeyId:'')];
+    el.innerHTML = `
+      <div class="pl-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+        <div class="pl-card"><div class="pl-label">📄 Resume</div><div style="font-weight:700">${esc(resumeTxt)}</div><a href="/resume.html" class="text-sm">Manage →</a></div>
+        <div class="pl-card"><div class="pl-label">💼 Job recommendations</div><div style="font-weight:700">${s.recommendations.count} matched${s.recommendations.best ? ` · best ${s.recommendations.best.score}%` : ''}</div>
+          <a href="/jobs.html${journeyId?'?journeyId='+esc(journeyId):''}" class="text-sm">Browse jobs →</a></div>
+        <div class="pl-card"><div class="pl-label">★ Saved jobs</div><div style="font-weight:700">${s.savedJobs}</div></div>
+        <div class="pl-card"><div class="pl-label">🎯 Next action</div><a class="btn btn-primary btn-sm" href="${esc(next[1])}">${esc(next[0])}</a></div>
+      </div>
+      ${s.recentActivities.length ? `<div class="pl-card" style="margin-top:1rem"><h3>Recent learning activity</h3>${s.recentActivities.map(a => `<div class="gap-row"><span>${esc(a.title)} <span class="text-muted text-sm">${a.skillName ? '· ' + esc(a.skillName) : ''}</span></span><span>${a.status === 'completed' ? '✔ completed ' : esc(a.status) + ' '}${verificationChip(a.verificationStatus)}</span></div>`).join('')}</div>` : ''}`;
+  } catch (e) { el.innerHTML = ''; }
+})();
 </script>
 </body>
 </html>

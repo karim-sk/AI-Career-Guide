@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Job Details — AI Career Navigator</title>
+<link rel="stylesheet" href="/css/main.css">
+<link rel="stylesheet" href="/css/platform.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="page-layout">
+  <div id="sidebar-placeholder"></div>
+  <div class="main-content">
+    <header class="page-header">
+      <button class="hamburger" id="hamburger" aria-label="Open menu">☰</button>
+      <div><div class="page-title" id="h-title">Job details</div><div class="page-subtitle" id="h-sub"></div></div>
+      <a href="/jobs.html" class="btn btn-ghost btn-sm" id="back">← All jobs</a>
+    </header>
+    <main class="page-body" id="main"><div class="pl-skeleton"></div></main>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/sidebar.js"></script>
+<script src="/js/platform.js"></script>
+<script>
+if (!requireAuth()) throw new Error('not auth');
+injectSidebar('jobs');
+const _p = new URLSearchParams(location.search);
+const jobId = _p.get('id'), journeyId = _p.get('journeyId') || '';
+const $ = id => document.getElementById(id);
+$('back').href = '/jobs.html' + (journeyId ? '?journeyId=' + journeyId : '');
+let data = null;
+
+const DIM = { skills: 'Technical skills', experience: 'Experience', projects: 'Projects & practical evidence', education: 'Education', alignment: 'Career & preference fit' };
+
+function gapRows(d) {
+  const all = [...d.match.categories.missingEvidence, ...d.match.categories.notAssessed, ...d.match.categories.inProgress, ...d.match.categories.partial];
+  if (!all.length) return '<p class="text-muted text-sm">Every identified skill has demonstrated evidence. 🎉</p>';
+  return all.map(g => `<div class="gap-row">
+      <div>${statusChip(g.status, g.claimed)} <strong>${esc(g.name)}</strong> <span class="text-muted text-sm">(${esc(g.importance)})</span></div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" data-course="${esc(g.skillId)}|${esc(g.name)}">Log course</button>
+        <button class="btn btn-outline btn-sm" data-verify="${esc(g.skillId)}|${esc(g.name)}">Skill check</button>
+        <button class="btn btn-ghost btn-sm" data-practical="${esc(g.skillId)}|${esc(g.name)}">Submit project</button>
+      </div></div>`).join('');
+}
+function group(title, list, status) {
+  if (!list.length) return '';
+  return `<div style="margin:.6rem 0"><div class="pl-label">${esc(title)} (${list.length})</div>${list.map(s => `<span class="st st-${status}${s.claimed?' st-claimed':''}">${esc(s.name)}${s.importance==='preferred'?' <em>(preferred)</em>':''}</span>`).join('')}</div>`;
+}
+
+function render() {
+  const d = data, j = d.job, m = d.match, c = m.categories;
+  $('h-title').textContent = j.title;
+  $('h-sub').textContent = [j.company, j.location].filter(Boolean).join(' · ');
+  document.title = `${j.title} — AI Career Navigator`;
+  const apply = j.applyUrl && safeHref(j.applyUrl)
+    ? `<a class="btn btn-primary" href="${esc(safeHref(j.applyUrl))}" target="_blank" rel="noopener noreferrer nofollow">Apply on ${esc(providerLabel(j.provider))} ↗</a>`
+    : `<button class="btn btn-ghost" disabled>No application link (sample data)</button>`;
+
+  $('main').innerHTML = `
+  ${j.isSample ? '<div class="pl-notice err" role="alert"><strong>Sample record.</strong> This is test data, not a real vacancy.</div>' : ''}
+  ${j.freshness && j.freshness.label === 'stale' ? '<div class="pl-notice warn">This listing was last seen a while ago and may no longer be open.</div>' : ''}
+  ${d.resumeStatus !== 'confirmed' ? `<div class="pl-notice">${d.resumeStatus === 'pending_review' ? 'Your resume is not confirmed yet, so it is not part of this match.' : 'No resume on file — this match uses your profile and assessments only.'} <a href="/resume.html">Open Resume →</a></div>` : ''}
+
+  <section class="pl-card" aria-labelledby="ov">
+    <div class="job-card" style="padding:0;border:0;box-shadow:none;background:none">
+      <div>
+        <h3 id="ov" class="job-title">${esc(j.title)}</h3>
+        <div class="job-meta"><span>🏢 ${esc(j.company || '—')}</span><span>📍 ${esc(j.location || '—')}${j.workMode !== 'unknown' ? ' · ' + esc(j.workMode) : ''}</span>
+          ${expText(j.experience) ? `<span>⏱ ${esc(expText(j.experience))}</span>` : ''}${j.employmentType ? `<span>💼 ${esc(j.employmentType)}</span>` : ''}
+          ${fmtSalary(j.salary) ? `<span>💰 ${fmtSalary(j.salary)}</span>` : ''}${j.educationRequirement && !['unknown','none'].includes(j.educationRequirement) ? `<span>🎓 ${esc(j.educationRequirement)} degree</span>` : ''}</div>
+        <div class="job-meta">${freshnessBadge(j.freshness)} <span>Source: ${esc(providerLabel(j.provider))}</span>${j.lastFetchedAt ? `<span>Fetched ${formatDate(j.lastFetchedAt)}</span>` : ''}</div>
+        <p class="job-expl">${esc(m.explanation)}</p>
+        ${m.warnings.length ? `<div class="pl-notice warn" style="margin-top:.5rem"><strong>Eligibility notes</strong><br>${m.warnings.map(esc).join('<br>')}</div>` : ''}
+        <div class="job-actions">${apply}
+          <button class="btn btn-primary" id="prep">🎯 Prepare for this job</button>
+          <a class="btn btn-ghost" href="${esc(mentorUrl(journeyId, j._id))}">🤖 Ask AI Mentor</a>
+          <button class="btn btn-ghost" id="save" aria-pressed="${d.saved}">${d.saved ? '★ Saved' : '☆ Save'}</button>
+          <button class="btn btn-ghost" id="recalc" title="Recompute the match with your latest evidence">↻ Refresh match</button>
+        </div>
+        <div id="prep-status" role="status" aria-live="polite" style="margin-top:.75rem"></div>
+      </div>
+      ${scoreRing(m.score, m.confidence)}
+    </div>
+  </section>
+
+  <section class="pl-card" style="margin-top:1rem" aria-labelledby="sk-h">
+    <h3 id="sk-h">Your evidence for this job’s skills</h3>
+    <p class="text-muted text-sm" style="margin:0 0 .5rem"><strong>Not yet assessed</strong> means we have no test result — it is not a confirmed weakness. Only a graded assessment can mark a skill <em>demonstrated</em> or <em>missing evidence</em>.</p>
+    ${group('Demonstrated', c.demonstrated, 'demonstrated')}${group('Partially demonstrated', c.partial, 'partial')}${group('Learning in progress', c.inProgress, 'in_progress')}
+    ${group('Not yet assessed', c.notAssessed, 'not_assessed')}${group('Missing required evidence', c.missingEvidence, 'missing_evidence')}
+  </section>
+
+  <section class="pl-card" style="margin-top:1rem" aria-labelledby="gp-h"><h3 id="gp-h">Close the gaps</h3><div id="gaps">${gapRows(d)}</div>
+    ${d.nextSteps.length ? `<h4 style="margin:1rem 0 .4rem;font-size:.9rem">Suggested next steps</h4><ol style="margin:0;padding-left:1.2rem" class="text-sm">${d.nextSteps.map(s => `<li>${esc(s.suggestion)}</li>`).join('')}</ol>` : ''}
+  </section>
+
+  <section class="pl-card" style="margin-top:1rem" aria-labelledby="bd-h">
+    <h3 id="bd-h">How the score is calculated</h3>
+    <p class="text-muted text-sm" style="margin:0 0 .5rem">Deterministic formula (no AI guessing). Dimensions without data are left out and the remaining weights are rescaled — they are never treated as a mismatch.</p>
+    <div class="pl-scroll"><table class="pl-table"><thead><tr><th>Dimension</th><th>Weight</th><th>Used weight</th><th>Result</th><th>Points</th></tr></thead><tbody>
+      ${Object.entries(m.breakdown).map(([k, v]) => `<tr><td>${esc(DIM[k] || k)}</td><td>${v.weight}</td><td>${v.available ? Math.round(v.effectiveWeight * 100) + '%' : '—'}</td>
+        <td>${v.available ? Math.round(v.score * 100) + '%' : `<span class="text-muted">not scored</span><br><span class="text-muted text-sm">${esc(v.note || '')}</span>`}</td><td>${v.available ? v.points : '—'}</td></tr>`).join('')}
+      <tr><td colspan="4"><strong>Estimated match</strong></td><td><strong>${m.score}</strong></td></tr></tbody></table></div>
+  </section>
+
+  <section class="pl-card" style="margin-top:1rem" aria-labelledby="req-h">
+    <h3 id="req-h">Listing requirements</h3>
+    <div><span class="pl-label">Required skills</span><br>${j.requiredSkills.length ? j.requiredSkills.map(s => `<span class="st st-not_assessed">${esc(s.name)}</span>`).join('') : '<span class="text-muted text-sm">None recognised in the listing text</span>'}</div>
+    ${j.preferredSkills.length ? `<div style="margin-top:.5rem"><span class="pl-label">Preferred skills</span><br>${j.preferredSkills.map(s => `<span class="st st-not_assessed">${esc(s.name)}</span>`).join('')}</div>` : ''}
+    <details style="margin-top:1rem"><summary style="cursor:pointer;font-weight:600">Full job description</summary>
+      <div style="white-space:pre-wrap;font-size:.85rem;line-height:1.6;margin-top:.75rem" class="text-muted">${esc(j.description || 'No description provided by the source.')}</div></details>
+    ${safeHref(j.sourceUrl) ? `<p class="text-sm" style="margin-top:.75rem">Original listing: <a href="${esc(safeHref(j.sourceUrl))}" target="_blank" rel="noopener noreferrer nofollow">${esc(providerLabel(j.provider))} ↗</a></p>` : ''}
+  </section>`;
+
+  wire();
+  if (d.preparationPlan) showPlan({ _id: d.preparationPlan.roadmapId, overallProgress: d.preparationPlan.progress }, true);
+}
+
+function showPlan(rm, existing) {
+  $('prep').textContent = existing ? '🎯 Open preparation plan' : '🎯 Open preparation plan';
+  $('prep-status').innerHTML = `<div class="pl-notice ok">${existing ? 'Your preparation plan for this job' : 'Preparation plan ready'} — ${rm.overallProgress || 0}% complete.
+    <a href="/roadmap.html?roadmapId=${esc(rm._id)}&journeyId=${esc(journeyId)}">Open plan →</a>
+    <button class="btn btn-ghost btn-sm" id="regen">Regenerate (keeps completed topics)</button></div>`;
+  $('prep').onclick = () => location.href = `/roadmap.html?roadmapId=${rm._id}&journeyId=${journeyId}`;
+  $('regen').onclick = () => prepare(true);
+}
+
+async function prepare(regen) {
+  if (!journeyId) { showToast('Choose a career journey first.', 'error'); return; }
+  const btn = $('prep'); btn.disabled = true; $('prep-status').innerHTML = '<span class="text-muted text-sm">Generating your plan with the AI roadmap generator…</span>';
+  try {
+    const r = await api.prepareForJob(journeyId, jobId, regen);
+    btn.disabled = false;
+    showPlan(r.roadmap, r.reused);
+    if (r.aiAvailable === false) $('prep-status').insertAdjacentHTML('afterbegin', '<div class="pl-notice warn">AI is unavailable — a system-generated plan was created instead.</div>');
+  } catch (err) { btn.disabled = false; $('prep-status').innerHTML = `<div class="pl-notice err" role="alert">${esc(err.message)}</div>`; }
+}
+
+function wire() {
+  $('prep').onclick = () => prepare(false);
+  $('save').onclick = async e => {
+    const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
+    try { on ? await api.saveJob(jobId) : await api.unsaveJob(jobId); e.currentTarget.setAttribute('aria-pressed', on); e.currentTarget.textContent = on ? '★ Saved' : '☆ Save'; } catch (er) { showToast(er.message, 'error'); }
+  };
+  $('recalc').onclick = async () => { try { const r = await api.refreshJob(jobId, journeyId); showToast(r.before != null && r.before !== r.after ? `Match updated: ${r.before}% → ${r.after}%` : 'Match is up to date.', 'success'); load(); } catch (e) { showToast(e.message, 'error'); } };
+  const after = () => load();
+  document.querySelectorAll('[data-course]').forEach(b => b.onclick = () => { const [id, name] = b.dataset.course.split('|'); logCourseDialog({ skillId: id, skillName: name, journeyId, jobId, onDone: after }); });
+  document.querySelectorAll('[data-verify]').forEach(b => b.onclick = () => { const [id, name] = b.dataset.verify.split('|'); verifyDialog({ skillId: id, skillName: name, journeyId, jobId, onDone: after }); });
+  document.querySelectorAll('[data-practical]').forEach(b => b.onclick = () => { const [id, name] = b.dataset.practical.split('|'); practicalDialog({ skillId: id, skillName: name, journeyId, onDone: after }); });
+}
+
+async function load() {
+  try { data = await api.getJob(jobId, journeyId); render(); }
+  catch (err) { $('main').innerHTML = `<div class="pl-notice err" role="alert">${esc(err.message)} <a href="/jobs.html">Back to jobs</a></div>`; }
+}
+if (!jobId) $('main').innerHTML = '<div class="pl-notice err">No job selected. <a href="/jobs.html">Browse jobs</a></div>'; else load();
+</script>
+</body>
+</html>

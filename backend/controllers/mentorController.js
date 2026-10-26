@@ -3,12 +3,16 @@ const AssessmentResult = require('../models/AssessmentResult');
 const Roadmap = require('../models/Roadmap');
 const CareerJourney = require('../models/CareerJourney');
 const aiService = require('../services/aiService');
+const JobListing = require('../models/JobListing');
+const JobRecommendation = require('../models/JobRecommendation');
+const LearningActivity = require('../models/LearningActivity');
+const { isId } = require('../utils/ids');
 
 // ─── POST /api/mentor/chat ───────────────────────────────────────────────────
 // Accepts optional journeyId to provide journey-specific context
 exports.chat = async (req, res, next) => {
   try {
-    const { message, sessionId, journeyId, topicContext } = req.body;
+    const { message, sessionId, journeyId, topicContext, jobId } = req.body;
     if (!message || !message.trim()) {
       return res.status(400).json({ success: false, message: 'Message is required.' });
     }
@@ -74,6 +78,25 @@ exports.chat = async (req, res, next) => {
       // Topic-level context when invoked from roadmap page
       topicContext: topicContext || null
     };
+
+    // Optional job context (bounded; the full resume / job list / unbounded history are never sent to the LLM)
+    if (jobId) {
+      if (!isId(jobId)) return res.status(400).json({ success: false, message: 'Invalid jobId.' });
+      const job = await JobListing.findById(jobId).lean();
+      if (job) {
+        const r = await JobRecommendation.findOne({ userId, jobId, journeyId: journeyId || null }).lean();
+        const gaps = r && r.skillBreakdown ? [
+          ...(r.skillBreakdown.missingEvidence || []), ...(r.skillBreakdown.notAssessed || []),
+          ...(r.skillBreakdown.inProgress || []), ...(r.skillBreakdown.partial || [])
+        ].slice(0, 8).map(g => ({ name: g.name, status: g.status })) : [];
+        const acts = await LearningActivity.find({ userId, ...(journeyId ? { journeyId } : {}) }).sort({ updatedAt: -1 }).limit(5).select('title status verificationStatus').lean();
+        context.jobContext = {
+          title: job.title, company: job.company,
+          required: (job.requiredSkills || []).slice(0, 12).map(s => s.name), preferred: (job.preferredSkills || []).slice(0, 8).map(s => s.name),
+          gaps, activities: acts, excerpt: (job.description || '').slice(0, 500)
+        };
+      }
+    }
 
     // Find or create session
     let session;

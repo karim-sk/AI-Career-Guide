@@ -306,7 +306,24 @@ let userName      = 'You';
 // ── Journey context from URL ─────────────────────────────────────────────────
 const _mentorParams   = new URLSearchParams(location.search);
 const _journeyId      = _mentorParams.get('journeyId') || null;
+const _jobId          = _mentorParams.get('jobId') || null;   // optional: selected job for context
 const _presetQuestion = _mentorParams.get('q') || null;
+
+// ── Optional job context chip + starter questions ────────────────────────────
+async function showJobContext() {
+  try {
+    const d = await api.getJob(_jobId, _journeyId);
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const gap = (d.match.categories.notAssessed[0] || d.match.categories.missingEvidence[0] || d.match.categories.partial[0] || {}).name;
+    const bar = document.getElementById('ai-status');
+    bar.style.display = 'block';
+    bar.innerHTML = `🎯 Job context: <strong>${esc(d.job.title)}</strong>${d.job.company ? ' @ ' + esc(d.job.company) : ''} · <a href="/job.html?id=${esc(_jobId)}&journeyId=${esc(_journeyId||'')}" style="color:var(--primary-light)">view job</a>`;
+    const chips = document.getElementById('prompt-chips');
+    const qs = [gap ? `Explain ${gap} and why this job needs it` : 'Why does this job require these skills?', gap ? `Give me a ${gap} practice problem` : 'Give me a practice problem for this role', 'Help me prepare for an interview for this job'];
+    chips.insertAdjacentHTML('afterbegin', qs.map(q => `<button type="button" class="prompt-chip" data-q="${esc(q)}">${esc(q)}</button>`).join(''));
+    chips.querySelectorAll('[data-q]').forEach(b => b.addEventListener('click', () => { const i = document.getElementById('chat-input'); i.value = b.dataset.q; i.focus(); }));
+  } catch (e) { /* mentor still works without the job context */ }
+}
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 (async function init() {
@@ -340,6 +357,7 @@ const _presetQuestion = _mentorParams.get('q') || null;
     }
 
     addMessage('assistant', buildWelcome(u.name, career, u.careerGoal));
+    if (_jobId) showJobContext();
   } catch {
     addMessage('assistant', buildWelcome('there', 'your target career', null));
   }
@@ -834,7 +852,7 @@ async function send() {
   document.getElementById('send-btn').disabled = true;
 
   try {
-    const res = await api.chat({ message: text, sessionId, journeyId: _journeyId });
+    const res = await api.chat({ message: text, sessionId, journeyId: _journeyId, ...(_jobId ? { jobId: _jobId } : {}) });
     sessionId = res.sessionId;
     removeTyping();
     addMessage('assistant', res.message);

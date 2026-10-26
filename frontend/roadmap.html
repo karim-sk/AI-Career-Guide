@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>My Roadmap — AI Career Navigator</title>
 <link rel="stylesheet" href="/css/main.css">
+<link rel="stylesheet" href="/css/platform.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ── Phase accordion ─────────────────────────────────────── */
@@ -228,6 +229,7 @@
 
 <script src="/js/api.js"></script>
 <script src="/js/sidebar.js"></script>
+<script src="/js/platform.js"></script>
 <script>
 if (!requireAuth()) throw new Error('not auth');
 injectSidebar('roadmap');
@@ -236,6 +238,7 @@ injectSidebar('roadmap');
 const _p           = new URLSearchParams(location.search);
 const urlJourneyId = _p.get('journeyId') || null;
 const urlCareerId  = _p.get('careerId')  || null;
+const urlRoadmapId = _p.get('roadmapId') || null;   // job-focused plans are opened by id
 
 let currentRoadmap   = null;
 let ctxJourneyId     = urlJourneyId;
@@ -626,6 +629,50 @@ function renderRoadmap(rm){
     </div>`;
 
   autoOpen(rm);
+  if (rm.kind === 'job') decorateJobRoadmap(rm);
+}
+
+// ── Job-focused roadmap banner (additive; career roadmaps never reach this) ───
+async function decorateJobRoadmap(rm){
+  // job plans are managed from the job page → hide career-roadmap-only controls
+  document.querySelectorAll('#rm-content [onclick*="confirmRegen"]').forEach(b=>b.remove());
+  const hb = document.getElementById('recalc-btn'); if (hb) hb.style.display = 'none';   // header "Regenerate" targets the CAREER roadmap
+  const wrap = document.getElementById('phases-wrap');
+  if (!wrap || document.getElementById('job-banner')) return;
+  wrap.insertAdjacentHTML('beforebegin', '<div id="job-banner" class="pl-card" style="margin-bottom:1rem" aria-live="polite"><div class="pl-skeleton"></div></div>');
+  const jc = rm.jobContext || {}; const jid = jc.jobId && (jc.jobId._id || jc.jobId);
+  let ev = {};
+  try { const e = (await api.getEvidence(ctxJourneyId)).evidence;
+    [['demonstrated','demonstrated'],['partial','partial'],['inProgress','in_progress'],['notAssessed','not_assessed'],['missingEvidence','missing_evidence']]
+      .forEach(([k,st]) => (e[k]||[]).forEach(x => ev[x.skillId] = { status: st, claimed: x.claimed })); } catch(e){}
+  const rows = (jc.gapSkills||[]).map(g => { const st = ev[g.skillId] || { status: g.status };
+    return `<div class="gap-row"><div>${statusChip(st.status, st.claimed)} <strong>${esc(g.skillName)}</strong> <span class="text-muted text-sm">(${esc(g.importance)})</span></div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" data-jc="${esc(g.skillId)}|${esc(g.skillName)}">✔ Log completed course</button>
+        ${st.status==='demonstrated' ? '' : `<button class="btn btn-outline btn-sm" data-jv="${esc(g.skillId)}|${esc(g.skillName)}">Skill check</button>`}
+      </div></div>`; }).join('');
+  const done = rm.overallProgress >= 100;
+  document.getElementById('job-banner').innerHTML = `
+    <div class="flex-between" style="flex-wrap:wrap;gap:.5rem"><div><span class="pl-badge tag-real">🎯 Job preparation plan</span>
+      <h3 style="margin:.4rem 0 0">${esc(jc.title||'')}${jc.company?` <span class="text-muted">@ ${esc(jc.company)}</span>`:''}</h3>
+      <p class="text-muted text-sm" style="margin:.25rem 0 0">${esc(jc.objective||'')}</p></div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">${jid?`<a class="btn btn-outline btn-sm" href="/job.html?id=${esc(jid)}&journeyId=${esc(ctxJourneyId||'')}">View job &amp; match</a>`:''}
+        ${jid?`<a class="btn btn-primary btn-sm" href="${esc(mentorUrl(ctxJourneyId, jid))}">🤖 Ask Mentor about this job</a>`:''}</div></div>
+    <h4 style="margin:1rem 0 .25rem;font-size:.9rem">Skills this plan targets</h4>
+    <p class="text-muted text-sm" style="margin:0">Ticking topics tracks your learning. A skill becomes <em>demonstrated</em> only after you pass its skill check.</p>
+    ${rows || '<p class="text-muted text-sm">No gap skills recorded.</p>'}
+    <div id="job-summary" style="margin-top:.75rem"></div>`;
+  const reload = async () => { try { const r = await api.getRoadmapById(rm._id); document.getElementById('job-banner').remove(); renderRoadmap(r.roadmap); } catch(e){ showToast(e.message,'error'); } };
+  document.querySelectorAll('[data-jc]').forEach(b => b.onclick = () => { const [id,name] = b.dataset.jc.split('|');
+    logCourseDialog({ skillId:id, skillName:name, journeyId:ctxJourneyId, jobId:jid, defaultTitle:name+' course', onDone:reload }); });
+  document.querySelectorAll('[data-jv]').forEach(b => b.onclick = () => { const [id,name] = b.dataset.jv.split('|');
+    verifyDialog({ skillId:id, skillName:name, journeyId:ctxJourneyId, jobId:jid, onDone:reload }); });
+  if (done) { try { const s = (await api.getRoadmapSummary(rm._id)).summary;
+    document.getElementById('job-summary').innerHTML = `<div class="pl-notice ok"><strong>🎉 Plan complete.</strong>
+      Verified: ${s.verifiedSkills.map(x=>esc(x.name)).join(', ')||'none yet'} · Still unverified: ${s.unverifiedSkills.map(x=>esc(x.name)).join(', ')||'none'}.
+      ${s.match?`Current match: <strong>${s.match.score}%</strong>. `:''}<br><span class="text-muted text-sm">${esc(s.note)}</span><br>
+      <a href="/jobs.html?journeyId=${esc(ctxJourneyId||'')}">See refreshed job recommendations →</a>
+      ${s.match&&s.match.jobId?` · <a href="${esc(mentorUrl(ctxJourneyId, s.match.jobId))}">Practise interview questions with the Mentor →</a>`:''}</div>`; } catch(e){} }
 }
 
 // ── Auto-open first in-progress or first phase ────────────────────────────────
@@ -822,7 +869,7 @@ async function generateRoadmap(){
 // ── Load ──────────────────────────────────────────────────────────────────────
 async function loadRoadmap(){
   try {
-    const res = await api.getRoadmap(ctxCareerId, ctxJourneyId);
+    const res = urlRoadmapId ? await api.getRoadmapById(urlRoadmapId) : await api.getRoadmap(ctxCareerId, ctxJourneyId);
     if(res.roadmap){
       renderRoadmap(res.roadmap);
     } else {

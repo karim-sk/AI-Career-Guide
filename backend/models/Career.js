@@ -46,6 +46,8 @@ const careerSchema = new mongoose.Schema({
     enum: ['very-high', 'high', 'medium', 'low'],
     default: 'high'
   },
+  family: { type: String, default: '' },          // e.g. 'Web', 'Cloud & DevOps', 'Data & AI'
+  aliases: { type: [String], default: [] },       // alternative job titles used for job matching
   isActive: {
     type: Boolean,
     default: true

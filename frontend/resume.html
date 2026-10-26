@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Resume — AI Career Navigator</title>
+<link rel="stylesheet" href="/css/main.css">
+<link rel="stylesheet" href="/css/platform.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="page-layout">
+  <div id="sidebar-placeholder"></div>
+  <div class="main-content">
+    <header class="page-header">
+      <button class="hamburger" id="hamburger" aria-label="Open menu">☰</button>
+      <div>
+        <div class="page-title">📄 Resume</div>
+        <div class="page-subtitle">Upload, review and confirm your resume — it is only used for job matching after you confirm it</div>
+      </div>
+      <a href="/jobs.html" class="btn btn-primary btn-sm">💼 Job Opportunities</a>
+    </header>
+
+    <main class="page-body" id="main">
+      <div id="notice" aria-live="polite"></div>
+
+      <section class="pl-card" id="upload-card" aria-labelledby="up-h">
+        <h3 id="up-h">Upload resume</h3>
+        <div class="pl-drop" id="drop" tabindex="0" role="button" aria-label="Choose a resume file to upload">
+          <div style="font-size:2rem">⬆️</div>
+          <p style="margin:.5rem 0 .25rem"><strong>Drop your resume here</strong> or click to browse</p>
+          <p class="text-muted text-sm" style="margin:0">PDF or DOCX · max <span id="maxmb">5</span> MB · text-based files only (scanned images are not supported)</p>
+          <input type="file" id="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="visually-hidden" aria-label="Resume file">
+        </div>
+        <div class="pl-bar" id="bar" hidden><i id="bar-fill"></i></div>
+        <p class="text-sm text-muted" id="upload-status" role="status" aria-live="polite" style="margin:.5rem 0 0"></p>
+      </section>
+
+      <div id="review"></div>
+    </main>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/sidebar.js"></script>
+<script src="/js/platform.js"></script>
+<script>
+if (!requireAuth()) throw new Error('not auth');
+injectSidebar('resume');
+
+let resume = null;
+let catalog = [];          // all skills (for the "add skill" picker)
+let keep = new Map();      // skillId → skill object currently kept
+const LEVELS = ['highschool','diploma','bachelor','master','phd','other'];
+
+const $ = id => document.getElementById(id);
+const notice = (msg, kind='') => { $('notice').innerHTML = msg ? `<div class="pl-notice ${kind}" role="${kind==='err'?'alert':'status'}">${msg}</div>` : ''; };
+
+// ── Upload ──────────────────────────────────────────────────────────────────
+const drop = $('drop'), file = $('file');
+drop.addEventListener('click', () => file.click());
+drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); file.click(); } });
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('drag'); }));
+drop.addEventListener('drop', e => { if (e.dataTransfer.files[0]) upload(e.dataTransfer.files[0]); });
+file.addEventListener('change', () => { if (file.files[0]) upload(file.files[0]); file.value = ''; });
+
+async function upload(f) {
+  notice('');
+  if (!/\.(pdf|docx)$/i.test(f.name)) { notice('Only .pdf and .docx files are accepted.', 'err'); return; }
+  if (f.size > 5 * 1024 * 1024) { notice('This file is larger than the 5 MB limit.', 'err'); return; }
+  if (resume && !confirm('This will replace your current resume (the previous file and extracted data are deleted). Continue?')) return;
+  const bar = $('bar'), fill = $('bar-fill'), st = $('upload-status');
+  bar.hidden = false; fill.style.width = '0%'; st.textContent = 'Uploading…';
+  try {
+    const res = await api.uploadResume(f, pct => { fill.style.width = pct + '%'; st.textContent = pct < 100 ? `Uploading… ${pct}%` : 'Analysing your resume…'; });
+    // success is shown only after the backend confirmed
+    st.textContent = '';
+    bar.hidden = true;
+    resume = res.resume;
+    notice(esc(res.message) + (res.warnings && res.warnings.length ? '<br>' + res.warnings.map(esc).join('<br>') : ''), 'ok');
+    initKeep(); render();
+  } catch (err) {
+    bar.hidden = true; st.textContent = '';
+    notice(esc(err.message), 'err');
+  }
+}
+
+// ── Review UI ───────────────────────────────────────────────────────────────
+function initKeep() { keep = new Map((resume.skills || []).map(s => [s.skillId, s])); }
+
+function render() {
+  const el = $('review');
+  if (!resume) { el.innerHTML = `<div class="pl-empty">No resume uploaded yet.</div>`; return; }
+  const confirmed = resume.reviewStatus === 'confirmed';
+  el.innerHTML = `
+  <section class="pl-card" style="margin-top:1rem" aria-labelledby="rv-h">
+    <div class="flex-between" style="flex-wrap:wrap;gap:.5rem">
+      <div><h3 id="rv-h" style="margin:0">${esc(resume.originalName)}</h3>
+        <span class="text-muted text-sm">${esc(resume.fileType.toUpperCase())} · ${(resume.size/1024).toFixed(0)} KB · uploaded ${formatDate(resume.uploadedAt)}</span></div>
+      <span class="pl-badge ${confirmed ? 'tag-real' : 'tag-warn'}">${confirmed ? '✔ Confirmed — used for matching' : 'Awaiting your review — not used yet'}</span>
+    </div>
+    <div class="pl-notice" style="margin-top:1rem">Automatic extraction can be wrong. Remove anything incorrect and add what is missing, then confirm.
+      A resume claim is <strong>not</strong> proof of mastery: skills only become “demonstrated” through assessments and skill checks.</div>
+
+    <div class="pl-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+      <div><label class="pl-label" for="f-name">Name (as detected)</label><input id="f-name" class="pl-input" value="${esc(resume.fullName)}" disabled></div>
+      <div><label class="pl-label" for="f-years">Years of experience</label><input id="f-years" class="pl-input" type="number" min="0" max="50" step="0.5" value="${esc(resume.totalExperienceYears)}"></div>
+    </div>
+
+    <h3 style="margin-top:1.25rem">Skills <span class="text-muted text-sm" id="skill-count"></span></h3>
+    <p class="text-muted text-sm" style="margin:0 0 .5rem">Click a skill to remove it. <span class="pl-chip-btn applied" style="cursor:default">Green border</span> = also used in a project/job description.</p>
+    <div id="skills" aria-label="Detected skills"></div>
+    <div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap;align-items:flex-end">
+      <div style="flex:1 1 220px;position:relative"><label class="pl-label" for="add">Add a skill</label>
+        <input id="add" class="pl-input" list="skill-list" placeholder="Start typing, e.g. Docker" autocomplete="off"><datalist id="skill-list"></datalist></div>
+      <button class="btn btn-outline btn-sm" id="add-btn">+ Add</button>
+    </div>
+    ${resume.unmappedSkills && resume.unmappedSkills.length ? `<p class="text-muted text-sm" style="margin-top:.75rem">Found but not in our skill catalog (ignored for matching): ${resume.unmappedSkills.map(esc).join(', ')}</p>` : ''}
+
+    <h3 style="margin-top:1.25rem">Education</h3>
+    <div id="edu">${(resume.education||[]).length ? resume.education.map((e,i)=>`
+      <div class="gap-row"><span style="flex:1 1 260px">${esc(e.raw||e.degree)}${e.institution && e.institution!==e.raw ? `<br><span class="text-muted text-sm">${esc(e.institution)}</span>`:''}</span>
+        <select class="pl-select" style="width:auto" data-edu="${i}" aria-label="Education level for entry ${i+1}">${LEVELS.map(l=>`<option ${l===e.level?'selected':''}>${l}</option>`).join('')}</select></div>`).join('')
+      : '<p class="text-muted text-sm">None detected.</p>'}</div>
+
+    <h3 style="margin-top:1.25rem">Experience &amp; projects</h3>
+    ${(resume.experience||[]).length ? `<div class="pl-scroll"><table class="pl-table"><thead><tr><th>Role</th><th>Company</th><th>Period</th><th>Years</th></tr></thead><tbody>
+      ${resume.experience.map(e=>`<tr><td>${esc(e.title)}${e.isInternship?' <span class="pl-badge tag-warn">internship</span>':''}</td><td>${esc(e.company)}</td><td>${esc(e.durationText)}</td><td>${esc(e.years)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="text-muted text-sm">No dated experience detected.</p>'}
+    ${(resume.projects||[]).length ? `<ul style="margin:.75rem 0 0;padding-left:1.1rem" class="text-sm">${resume.projects.map(p=>`<li><strong>${esc(p.name)}</strong></li>`).join('')}</ul>` : ''}
+
+    <h3 style="margin-top:1.25rem">Certifications</h3>
+    <label class="pl-label" for="certs">One per line</label>
+    <textarea id="certs" class="pl-input" rows="3">${esc((resume.certifications||[]).join('\n'))}</textarea>
+
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1.25rem">
+      <button class="btn btn-primary" id="confirm">✔ Confirm &amp; use for job matching</button>
+      <button class="btn btn-outline" id="save">Save draft</button>
+      ${resume.fileRetained ? '<button class="btn btn-ghost" id="dl">⬇ Download original</button>' : ''}
+      <button class="btn btn-ghost" id="replace">Replace</button>
+      <button class="btn btn-danger" id="del">🗑 Delete resume</button>
+    </div>
+  </section>`;
+  drawSkills(); 
+  $('add').addEventListener('input', () => {});
+  $('add-btn').onclick = addSkill;
+  $('add').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addSkill(); } });
+  $('confirm').onclick = () => save(true);
+  $('save').onclick = () => save(false);
+  $('replace').onclick = () => file.click();
+  if ($('dl')) $('dl').onclick = () => api.downloadResume().catch(e => notice(esc(e.message), 'err'));
+  $('del').onclick = remove;
+  const dl = $('skill-list'); dl.innerHTML = catalog.filter(s => !keep.has(s._id)).map(s => `<option value="${esc(s.name)}">`).join('');
+}
+
+function drawSkills() {
+  const box = $('skills'); const list = [...keep.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  box.innerHTML = list.length ? list.map(s => `<button type="button" class="pl-chip-btn ${s.evidence==='applied'?'applied':''}" data-id="${esc(s.skillId)}" aria-label="Remove ${esc(s.name)}">${esc(s.name)} <span class="x" aria-hidden="true">×</span></button>`).join('')
+    : '<span class="text-muted text-sm">No skills detected — add some below.</span>';
+  box.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { keep.delete(b.dataset.id); drawSkills(); }));
+  $('skill-count').textContent = `(${list.length})`;
+}
+function addSkill() {
+  const v = $('add').value.trim().toLowerCase(); if (!v) return;
+  const s = catalog.find(x => x.name.toLowerCase() === v);
+  if (!s) { notice('That skill is not in the catalog. Pick one from the suggestions.', 'warn'); return; }
+  keep.set(s._id, { skillId: s._id, name: s.name, evidence: 'listed', userAdded: true });
+  $('add').value = ''; notice(''); drawSkills();
+}
+
+async function save(confirmIt) {
+  const btns = document.querySelectorAll('#review button'); btns.forEach(b => b.disabled = true);
+  try {
+    const education = (resume.education || []).map((e, i) => ({ ...e, level: document.querySelector(`[data-edu="${i}"]`)?.value || e.level }));
+    const res = await api.reviewResume({
+      skills: [...keep.keys()], totalExperienceYears: Number($('f-years').value) || 0, education,
+      certifications: $('certs').value.split('\n').map(s => s.trim()).filter(Boolean), confirm: confirmIt
+    });
+    resume = res.resume; initKeep();
+    notice(esc(res.message) + (confirmIt ? ' <a href="/jobs.html">See job recommendations →</a>' : ''), 'ok'); render();
+  } catch (err) { notice(esc(err.message), 'err'); btns.forEach(b => b.disabled = false); }
+}
+async function remove() {
+  if (!confirm('Delete your resume? The stored file and all extracted data will be permanently removed.')) return;
+  try { const r = await api.deleteResume(); resume = null; keep = new Map(); notice(esc(r.message), 'ok'); render(); }
+  catch (err) { notice(esc(err.message), 'err'); }
+}
+
+(async function init() {
+  $('review').innerHTML = '<div class="pl-skeleton" style="margin-top:1rem"></div>';
+  try {
+    const [r, sk] = await Promise.all([api.getResume(), api.getSkills()]);
+    catalog = sk.skills || []; resume = r.resume;
+    if (resume) initKeep();
+    render();
+  } catch (err) { $('review').innerHTML = ''; notice('Could not load your resume: ' + esc(err.message), 'err'); }
+})();
+</script>
+</body>
+</html>

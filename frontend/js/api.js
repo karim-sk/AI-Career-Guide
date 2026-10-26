@@ -124,6 +124,67 @@ const api = {
 
   // History
   getHistory: () => api.get('/journeys/history'),
+
+  // ── Resume ──
+  getResume:     ()      => api.get('/resume'),
+  reviewResume:  (data)  => request('/resume/review', { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteResume:  ()      => api.delete('/resume'),
+
+  // ── Jobs ──
+  getJobProviders: () => api.get('/jobs/providers'),
+  getJobRecommendations: (params) => api.get('/jobs/recommendations?' + new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null))),
+  getJob:        (id, journeyId) => api.get(`/jobs/${id}${journeyId ? `?journeyId=${journeyId}` : ''}`),
+  refreshJob:    (id, journeyId) => api.post(`/jobs/${id}/refresh`, { journeyId }),
+  saveJob:       (id)   => api.post(`/jobs/${id}/save`, {}),
+  unsaveJob:     (id)   => api.delete(`/jobs/${id}/save`),
+  getJobSummary: (journeyId) => api.get(`/jobs/summary${journeyId ? `?journeyId=${journeyId}` : ''}`),
+  getJobPrefs:   ()     => api.get('/jobs/preferences'),
+  setJobPrefs:   (data) => api.put('/jobs/preferences', data),
+
+  // ── Job-focused roadmap (same generator) ──
+  prepareForJob: (journeyId, jobId, regenerate) => api.post('/roadmap/generate-for-job', { journeyId, jobId, regenerate: !!regenerate }),
+  getJobRoadmap: (journeyId, jobId) => api.get(`/roadmap/job?jobId=${jobId}${journeyId ? `&journeyId=${journeyId}` : ''}`),
+  getRoadmapById: (id) => api.get(`/roadmap/by-id/${id}`),
+
+  // ── Learning activities & verification ──
+  createActivity:   (data) => api.post('/learning/activities', data),
+  startActivity:    (id)   => api.post(`/learning/activities/${id}/start`, {}),
+  completeActivity: (id, data) => api.post(`/learning/activities/${id}/complete`, data || {}),
+  startVerification:(data) => api.post('/learning/verification/start', data),
+  submitVerification: (id, answers) => api.post(`/learning/verification/${id}/submit`, { answers }),
+  submitPractical:  (data) => api.post('/learning/practical', data),
+  getEvidence:      (journeyId) => api.get(`/learning/evidence${journeyId ? `?journeyId=${journeyId}` : ''}`),
+  getRoadmapSummary:(roadmapId) => api.get(`/learning/roadmap-summary/${roadmapId}`),
+};
+
+/** Multipart upload with progress (fetch has no upload-progress events). Resolves with parsed JSON or rejects with Error(message). */
+api.uploadResume = function (file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API_BASE}/resume`);
+    const token = getToken();
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.onprogress = e => { if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100)); };
+    xhr.onerror = () => reject(new Error('Network error while uploading.'));
+    xhr.onload = () => {
+      if (xhr.status === 401) { removeToken(); window.location.href = '/login.html'; return; }
+      let data = {}; try { data = JSON.parse(xhr.responseText); } catch (e) { /* ignore */ }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+      else reject(Object.assign(new Error(data.message || `Upload failed (${xhr.status})`), { status: xhr.status }));
+    };
+    const fd = new FormData(); fd.append('resume', file);
+    xhr.send(fd);
+  });
+};
+
+/** Authenticated download of the stored resume (token travels in the header, not the URL). */
+api.downloadResume = async function () {
+  const res = await fetch(`${API_BASE}/resume/file`, { headers: { Authorization: `Bearer ${getToken()}` } });
+  if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.message || 'Download failed'); }
+  const blob = await res.blob();
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = (res.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/)?.[1] || 'resume';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 };
 
 function requireAuth() {

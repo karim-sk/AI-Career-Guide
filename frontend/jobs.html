@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Job Opportunities — AI Career Navigator</title>
+<link rel="stylesheet" href="/css/main.css">
+<link rel="stylesheet" href="/css/platform.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="page-layout">
+  <div id="sidebar-placeholder"></div>
+  <div class="main-content">
+    <header class="page-header">
+      <button class="hamburger" id="hamburger" aria-label="Open menu">☰</button>
+      <div>
+        <div class="page-title">💼 Job Opportunities</div>
+        <div class="page-subtitle">Real listings from approved job APIs, matched to your verified skills</div>
+      </div>
+      <button class="btn btn-primary btn-sm" id="refresh">↻ Refresh recommendations</button>
+    </header>
+
+    <main class="page-body">
+      <div id="resume-banner"></div>
+      <div id="notices" aria-live="polite"></div>
+
+      <form class="pl-toolbar" id="filters" role="search" aria-label="Job filters">
+        <div class="form-group"><label class="pl-label" for="journey">Career journey</label><select id="journey" class="pl-select"></select></div>
+        <div class="form-group grow"><label class="pl-label" for="query">Search title or keyword</label><input id="query" class="pl-input" type="search" placeholder="Defaults to your journey’s career"></div>
+        <div class="form-group"><label class="pl-label" for="location">Location</label><input id="location" class="pl-input" placeholder="Any"></div>
+        <div class="form-group"><label class="pl-label" for="workMode">Work mode</label><select id="workMode" class="pl-select"><option value="">Any</option><option value="remote">Remote</option><option value="hybrid">Hybrid</option><option value="onsite">On-site</option></select></div>
+        <div class="form-group"><label class="pl-label" for="experience">Experience</label><select id="experience" class="pl-select"><option value="">Any</option><option value="entry">Entry (0–1 yr)</option><option value="mid">Mid (2–5 yrs)</option><option value="senior">Senior (5+ yrs)</option></select></div>
+        <div class="form-group"><label class="pl-label" for="jobType">Job type</label><select id="jobType" class="pl-select"><option value="">Any</option><option value="full-time">Full-time</option><option value="part-time">Part-time</option><option value="contract">Contract</option><option value="internship">Internship</option></select></div>
+        <div class="form-group"><label class="pl-label" for="minScore">Min match</label><select id="minScore" class="pl-select"><option value="0">Any</option><option value="40">40%+</option><option value="60">60%+</option><option value="80">80%+</option></select></div>
+        <div class="form-group"><label class="pl-label" for="minSalary">Min salary <span class="text-muted">(if listed)</span></label><input id="minSalary" class="pl-input" type="number" min="0" placeholder="Any"></div>
+        <div class="form-group"><label class="pl-label" for="sort">Sort by</label><select id="sort" class="pl-select"><option value="match">Best match</option><option value="date">Newest</option></select></div>
+        <button class="btn btn-primary btn-sm" type="submit">Search</button>
+      </form>
+
+      <p class="text-muted text-sm" id="summary" role="status" aria-live="polite"></p>
+      <div id="list" class="pl-grid" aria-busy="false"></div>
+      <p class="text-muted text-sm" style="margin-top:1rem">Match scores are <strong>estimates</strong> computed from the information available (listing text, your resume, assessments and skill checks). They do not predict hiring decisions. Always confirm details on the employer’s page.</p>
+    </main>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/sidebar.js"></script>
+<script src="/js/platform.js"></script>
+<script>
+if (!requireAuth()) throw new Error('not auth');
+injectSidebar('jobs');
+const $ = id => document.getElementById(id);
+let journeyId = '';
+
+function params(refresh) {
+  const p = { journeyId, refresh: refresh ? '1' : '' };
+  ['query','location','workMode','experience','jobType','minScore','minSalary','sort'].forEach(k => { const v = $(k).value.trim(); if (v && v !== '0') p[k] = v; });
+  return p;
+}
+
+function card(it) {
+  const j = it.job, m = it.match;
+  const apply = j.applyUrl && safeHref(j.applyUrl)
+    ? `<a class="btn btn-primary btn-sm" href="${esc(safeHref(j.applyUrl))}" target="_blank" rel="noopener noreferrer nofollow">Apply ↗</a>`
+    : `<button class="btn btn-ghost btn-sm" disabled title="Sample records have no application link">No application link</button>`;
+  const matching = m.matching.slice(0, 8).map(s => `<span class="st st-${esc(s.status)}">${esc(s.name)}</span>`).join('');
+  const gapChips = m.gaps.slice(0, 6).map(g => `<span class="st st-${esc(g.status)}${g.claimed?' st-claimed':''}" title="${esc(STATUS_HELP[g.status]||'')}">${esc(g.name)} · ${esc(STATUS_LABEL[g.status])}</span>`).join('');
+  return `<article class="pl-card job-card" aria-labelledby="t-${esc(j._id)}">
+    <div>
+      <h3 class="job-title" id="t-${esc(j._id)}">${esc(j.title)}</h3>
+      <div class="job-meta">
+        <span>🏢 ${esc(j.company || 'Company not listed')}</span>
+        <span>📍 ${esc(j.location || 'Location not listed')}${j.workMode !== 'unknown' ? ' · ' + esc(j.workMode) : ''}</span>
+        ${expText(j.experience) ? `<span>⏱ ${esc(expText(j.experience))}</span>` : ''}
+        ${j.employmentType ? `<span>💼 ${esc(j.employmentType)}</span>` : ''}
+        ${fmtSalary(j.salary) ? `<span>💰 ${fmtSalary(j.salary)}</span>` : ''}
+        ${j.postedAt ? `<span>🗓 ${formatDate(j.postedAt)}</span>` : ''}
+      </div>
+      <div class="job-meta" style="margin-top:-.25rem">${freshnessBadge(j.freshness)} <span>Source: ${esc(providerLabel(j.provider))}</span></div>
+      ${matching ? `<div><span class="pl-label" style="display:inline">Matching skills</span><br>${matching}</div>` : ''}
+      ${gapChips ? `<div style="margin-top:.4rem"><span class="pl-label" style="display:inline">Missing or unverified</span><br>${gapChips}</div>` : ''}
+      <p class="job-expl">${esc(m.explanation)}</p>
+      ${m.warnings.length ? `<p class="job-expl" style="color:#FBBF24">⚠ ${m.warnings.map(esc).join(' · ')}</p>` : ''}
+      <div class="job-actions">
+        <a class="btn btn-outline btn-sm" href="/job.html?id=${esc(j._id)}&journeyId=${esc(journeyId)}">View details</a>
+        ${apply}
+        <a class="btn btn-ghost btn-sm" href="${esc(mentorUrl(journeyId, j._id))}">🤖 Ask Mentor</a>
+        <button class="btn btn-ghost btn-sm" data-save="${esc(j._id)}" aria-pressed="${it.saved}">${it.saved ? '★ Saved' : '☆ Save'}</button>
+      </div>
+    </div>
+    ${scoreRing(m.score, m.confidence)}
+  </article>`;
+}
+
+async function load(refresh) {
+  const list = $('list'); list.setAttribute('aria-busy', 'true');
+  list.innerHTML = '<div class="pl-skeleton"></div><div class="pl-skeleton"></div><div class="pl-skeleton"></div>';
+  $('notices').innerHTML = ''; $('summary').textContent = 'Searching…';
+  try {
+    const r = await api.getJobRecommendations(params(refresh));
+    const n = [];
+    if (r.notice) n.push(`<div class="pl-notice warn">${esc(r.notice)}</div>`);
+    (r.providers || []).filter(p => p.status === 'error').forEach(p => n.push(`<div class="pl-notice err" role="alert">${esc(p.label)}: ${esc(p.message)} <button class="btn btn-ghost btn-sm" onclick="load(true)">Retry</button></div>`));
+    $('notices').innerHTML = n.join('');
+    renderResumeBanner(r.resumeStatus);
+    if (!r.items.length) {
+      list.innerHTML = `<div class="pl-empty"><div style="font-size:2.5rem">🔍</div><p>No jobs match these filters.</p>
+        <p class="text-sm">Try a broader search, remove filters, or <a href="#" onclick="load(true);return false">refresh from the job providers</a>.</p></div>`;
+      $('summary').textContent = '';
+    } else {
+      list.innerHTML = r.items.map(card).join('');
+      $('summary').textContent = `${r.items.length} job(s) for “${r.query || 'all'}” · sources: ${(r.providers||[]).map(p => `${p.label} (${p.status}${p.status==='error'?'':', '+p.count})`).join(', ')}`;
+      list.querySelectorAll('[data-save]').forEach(b => b.addEventListener('click', async () => {
+        const on = b.getAttribute('aria-pressed') !== 'true';
+        try { on ? await api.saveJob(b.dataset.save) : await api.unsaveJob(b.dataset.save); b.setAttribute('aria-pressed', on); b.textContent = on ? '★ Saved' : '☆ Save'; }
+        catch (e) { showToast(e.message, 'error'); }
+      }));
+    }
+  } catch (err) {
+    list.innerHTML = `<div class="pl-notice err" role="alert">Could not load jobs: ${esc(err.message)} <button class="btn btn-ghost btn-sm" onclick="load(true)">Retry</button></div>`;
+    $('summary').textContent = '';
+  } finally { list.setAttribute('aria-busy', 'false'); }
+}
+
+function renderResumeBanner(status) {
+  const b = $('resume-banner');
+  if (status === 'confirmed') { b.innerHTML = ''; return; }
+  b.innerHTML = status === 'pending_review'
+    ? `<div class="pl-notice warn">📄 Your resume is uploaded but <strong>not confirmed yet</strong>, so it is not used. <a href="/resume.html">Review &amp; confirm it →</a></div>`
+    : `<div class="pl-notice">📄 Upload your resume for more accurate matches. Matches currently use your profile and assessments only. <a href="/resume.html">Upload resume →</a></div>`;
+}
+
+$('filters').addEventListener('submit', e => { e.preventDefault(); load(false); });
+$('refresh').addEventListener('click', () => load(true));
+$('journey').addEventListener('change', e => { journeyId = e.target.value; load(false); });
+
+(async function init() {
+  const jp = await loadJourneyPicker($('journey')); journeyId = jp.journeyId;
+  if (!journeyId) { $('list').innerHTML = '<div class="pl-empty"><p>Start a career journey first so we can tailor recommendations.</p><a class="btn btn-primary" href="/profile.html">Choose a career</a></div>'; return; }
+  load(false);
+})();
+</script>
+</body>
+</html>

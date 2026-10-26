@@ -812,3 +812,22 @@ Reassessment
      ↓
 Continuous Career Development
 ```
+
+
+---
+
+## 🚀 Career Platform upgrade (Resume • Real Jobs • Skill Verification)
+
+The app now continues past the roadmap: **upload resume → review → discover real jobs → see explainable match & gaps → "Prepare for this job" (same AI roadmap generator) → complete courses → verify skills with graded checks → match recalculates → AI Mentor with job context.**
+
+* Full design, evidence model, scoring formula, API list, security notes: **[docs/PLATFORM.md](docs/PLATFORM.md)**
+* Catalog: 126 skills (aliases, relations, resources), 28 careers, 314 assessment questions — `npm run seed:report`
+* New pages: `/resume.html`, `/jobs.html`, `/job.html?id=…` (+ job banner in `/roadmap.html?roadmapId=…`)
+
+```bash
+npm install && cp .env.example .env     # fill MONGODB_URI, JWT_SECRET, AI key (optional: ADZUNA_APP_ID/KEY)
+npm run seed                            # safe to run repeatedly — never deletes data
+npm start                               # http://localhost:5000
+npm test
+```
+No live job API key? Use `JOB_PROVIDERS=remotive,arbeitnow` (keyless), or `JOB_PROVIDERS=sample` for clearly-labelled **non-real** fixtures in local development.

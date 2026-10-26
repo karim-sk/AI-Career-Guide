@@ -7,6 +7,8 @@ const aiService    = require('../services/aiService');
 // ─── Sync journey progress from roadmap ──────────────────────────────────────
 async function syncJourneyProgress(userId, roadmap) {
   if (!roadmap) return;
+  // Job-focused roadmaps are supplementary: they must never overwrite the journey's career progress
+  if (roadmap.kind === 'job') return;
   const progress = roadmap.overallProgress || 0;
   const update = { progress, lastActivityAt: new Date() };
   if (progress >= 100) { update.status = 'COMPLETED'; update.completedAt = new Date(); }
@@ -383,8 +385,138 @@ exports.recalculateRoadmap = async (req, res, next) => {
 // ─── GET /api/roadmap/all ────────────────────────────────────────────────────
 exports.getAllRoadmaps = async (req, res, next) => {
   try {
-    const roadmaps = await Roadmap.find({ userId: req.user._id })
+    const roadmaps = await Roadmap.find({ userId: req.user._id, kind: { $ne: 'job' } })
       .populate('careerId', 'title icon').sort({ createdAt: -1 });
     res.json({ success: true, roadmaps });
+  } catch (err) { next(err); }
+};
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  JOB-FOCUSED ROADMAPS — same generator (aiService.generateRoadmap) + same Roadmap model
+// ═════════════════════════════════════════════════════════════════════════════
+const JobListing = require('../models/JobListing');
+const { isId } = require('../utils/ids');
+const { loadCandidateProfile } = require('../services/evidenceService');
+const { getOrCompute } = require('../services/recommendationService');
+const { rankGaps } = require('../services/matchingService');
+
+exports.syncJourneyProgress = syncJourneyProgress;
+exports.buildProgressSummary = buildProgressSummary;
+
+const norm = t => String(t || '').trim().toLowerCase();
+
+// POST /api/roadmap/generate-for-job   { journeyId, jobId, regenerate? }
+exports.generateJobRoadmap = async (req, res, next) => {
+  try {
+    const userId = req.user._id;
+    const { journeyId, jobId, regenerate } = req.body || {};
+    if (!isId(journeyId) || !isId(jobId)) return res.status(400).json({ success: false, message: 'journeyId and jobId are required.' });
+
+    const journey = await CareerJourney.findOne({ _id: journeyId, userId });
+    if (!journey) return res.status(403).json({ success: false, message: 'Journey not found or access denied.' });
+    const job = await JobListing.findById(jobId);
+    if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
+
+    const existing = await Roadmap.findOne({ userId, journeyId, kind: 'job', 'jobContext.jobId': job._id, jobActive: true })
+      .populate('careerId', 'title icon');
+    if (existing && !regenerate) {
+      return res.json({ success: true, reused: true, message: 'Existing preparation plan for this job.', roadmap: existing, aiAvailable: null });
+    }
+
+    const profile = await loadCandidateProfile(userId, journeyId);
+    const { rec } = await getOrCompute(userId, journeyId, job, profile);
+    const ranked = rankGaps(rec.skillBreakdown).filter(g => g.status !== 'demonstrated');
+    const gaps = ranked.slice(0, 6);
+    if (!gaps.length) {
+      return res.status(400).json({ success: false, message: 'Your profile already shows demonstrated evidence for every identified skill of this job. Nothing to prepare — consider applying or practising interviews with the AI Mentor.' });
+    }
+
+    const career = await Career.findById(journey.careerId);
+    const levelOf = g => (g.score != null ? g.score : 0);
+    const demonstrated = (rec.skillBreakdown.demonstrated || []).map(s => s.name);
+
+    const context = {
+      career: career ? career.title : journey.careerName,
+      userName: req.user.name,
+      selectedSkills: demonstrated,
+      skillScores: [...profile.skills.values()].filter(s => s.score != null).map(s => ({ skillName: s.name, score: s.score, proficiency: s.score >= 85 ? 'Expert' : s.score >= 70 ? 'Advanced' : s.score >= 40 ? 'Intermediate' : 'Beginner' })),
+      skillGaps: gaps.map(g => ({ skillName: g.name, currentLevel: levelOf(g), requiredLevel: 70, gap: Math.max(1, 70 - levelOf(g)), severity: g.status === 'missing_evidence' ? 'High' : 'Medium' })),
+      jobContext: {
+        title: job.title, company: job.company,
+        requiredSkills: (job.requiredSkills || []).map(s => s.name), preferredSkills: (job.preferredSkills || []).map(s => s.name),
+        gaps: gaps.map(g => ({ name: g.name, status: g.status, importance: g.importance })), demonstrated
+      }
+    };
+
+    const aiResult = await aiService.generateRoadmap(context);
+    let phases, aiSummary, generatedBy;
+    if (aiResult.success && aiResult.data && aiResult.data.phases && aiResult.data.phases.length > 0) {
+      generatedBy = 'AI'; phases = aiResult.data.phases;
+      aiSummary = aiResult.data.summary || `Preparation plan for ${job.title}.`;
+    } else {
+      generatedBy = 'system';
+      phases = buildSystemRoadmap(context.career, context.skillGaps, demonstrated);
+      aiSummary = `System-generated preparation plan for ${job.title} (AI provider unavailable). It targets the skills still needing evidence.`;
+    }
+
+    // Preserve progress when regenerating: completed topics/exercises (matched by title) stay completed
+    let version = 1;
+    if (existing) {
+      const doneTopics = new Set(), doneEx = new Set();
+      existing.phases.forEach(p => (p.weeks || []).forEach(w => {
+        (w.topics || []).forEach(t => { if (t.completed) doneTopics.add(norm(t.title)); });
+        (w.exercises || []).forEach(e => { if (e.completed) doneEx.add(norm(e.title)); });
+      }));
+      phases.forEach(p => (p.weeks || []).forEach(w => {
+        (w.topics || []).forEach(t => { if (doneTopics.has(norm(t.title))) { t.completed = true; t.completedAt = new Date(); } });
+        (w.exercises || []).forEach(e => { if (doneEx.has(norm(e.title))) { e.completed = true; e.completedAt = new Date(); } });
+      }));
+      version = (existing.version || 1) + 1;
+      existing.jobActive = false;
+      await existing.save();
+    }
+
+    const roadmap = new Roadmap({
+      userId, journeyId, careerId: journey.careerId, generatedBy, phases, aiSummary, version,
+      isActive: false,            // keeps every existing "active career roadmap" query untouched
+      kind: 'job', jobActive: true,
+      jobContext: {
+        jobId: job._id, title: job.title, company: job.company,
+        objective: `Close the evidence gaps for "${job.title}"${job.company ? ' at ' + job.company : ''}.`,
+        gapSkills: gaps.map(g => ({ skillId: g.skillId, skillName: g.name, status: g.status, importance: g.importance }))
+      }
+    });
+    roadmap.recalculateProgress();
+    await roadmap.save();
+
+    const populated = await Roadmap.findById(roadmap._id).populate('careerId', 'title icon');
+    res.status(201).json({
+      success: true, reused: false, aiAvailable: aiResult.success,
+      message: aiResult.success ? 'Job-focused plan generated.' : 'Job-focused plan generated by the system fallback (AI unavailable).',
+      roadmap: populated
+    });
+  } catch (err) { next(err); }
+};
+
+// GET /api/roadmap/job?journeyId=&jobId=
+exports.getJobRoadmap = async (req, res, next) => {
+  try {
+    const { journeyId, jobId } = req.query;
+    if (!isId(jobId)) return res.status(400).json({ success: false, message: 'jobId is required.' });
+    const q = { userId: req.user._id, kind: 'job', 'jobContext.jobId': jobId, jobActive: true };
+    if (journeyId) { if (!isId(journeyId)) return res.status(400).json({ success: false, message: 'Invalid journeyId.' }); q.journeyId = journeyId; }
+    const roadmap = await Roadmap.findOne(q).populate('careerId', 'title icon');
+    res.json({ success: true, roadmap: roadmap || null });
+  } catch (err) { next(err); }
+};
+
+// GET /api/roadmap/by-id/:roadmapId   (owner only — used by roadmap.html?roadmapId=)
+exports.getRoadmapById = async (req, res, next) => {
+  try {
+    if (!isId(req.params.roadmapId)) return res.status(400).json({ success: false, message: 'Invalid roadmap id.' });
+    const roadmap = await Roadmap.findOne({ _id: req.params.roadmapId, userId: req.user._id }).populate('careerId', 'title icon');
+    if (!roadmap) return res.status(404).json({ success: false, message: 'Roadmap not found or access denied.' });
+    res.json({ success: true, roadmap });
   } catch (err) { next(err); }
 };

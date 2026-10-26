@@ -6,6 +6,8 @@ function buildSidebar(activePage) {
     { page: 'profile',   icon: '👤', label: 'My Profile',       href: '/profile.html' },
     { page: 'assessment',icon: '📝', label: 'Assessment',       href: '/assessment.html' },
     { page: 'results',   icon: '📈', label: 'Results & Gaps',   href: '/results.html' },
+    { page: 'resume',    icon: '📄', label: 'Resume',           href: '/resume.html' },
+    { page: 'jobs',      icon: '💼', label: 'Job Opportunities', href: '/jobs.html' },
     { page: 'roadmap',   icon: '🗺️', label: 'My Roadmap',       href: '/roadmap.html' },
     { page: 'mentor',    icon: '🤖', label: 'AI Mentor',        href: '/mentor.html' },
     { page: 'history',   icon: '📋', label: 'Career History',   href: '/history.html' },

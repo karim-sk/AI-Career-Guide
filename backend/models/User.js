@@ -52,6 +52,13 @@ const userSchema = new mongoose.Schema({
   profileComplete: {
     type: Boolean,
     default: false
+  },
+  // Job search preferences (all optional)
+  jobPreferences: {
+    locations:  { type: [String], default: [] },
+    workModes:  { type: [String], default: [] },   // remote | hybrid | onsite
+    jobTypes:   { type: [String], default: [] },   // full-time | part-time | contract | internship
+    minSalary:  { type: Number, default: null }
   }
 }, {
   timestamps: true
